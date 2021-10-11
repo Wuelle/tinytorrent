@@ -1,3 +1,3 @@
 # TinyTorrent
-A sub-1000 line torrent client.
+A sub-1000 line bittorrent client.
 

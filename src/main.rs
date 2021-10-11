@@ -1,6 +1,7 @@
 use anyhow::{ensure, Context, Result};
 use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Bytes, Read};
 use structopt::StructOpt;
@@ -84,14 +85,11 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
                     let mut map = BTreeMap::new();
 
                     loop {
-                        println!("TRYING TO PARSE A KEY!");
                         let key = parse_benc_value(bytes)?.ok_or(ParseError::UnexpectedEOF)?;
-                        println!("PARSED A KEY! ({:?})", key);
                         if let Value::End = key {
                             break;
                         }
                         let value = parse_benc_value(bytes)?.ok_or(ParseError::UnexpectedEOF)?;
-                        println!("parsed a key and a value!");
                         map.insert(key, value);
                     }
                     Value::Dictionary(map)
@@ -114,7 +112,7 @@ struct Cli {
     path: std::path::PathBuf,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Value {
     /// any integer value
     Integer(i64),
@@ -126,6 +124,22 @@ enum Value {
     Dictionary(BTreeMap<Value, Value>),
     /// marks the end of items like lists or dictionaries
     End,
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Integer(x) => f.debug_tuple("Integer").field(&x).finish(),
+            Value::ByteString(len, x) => f
+                .debug_tuple("ByteString")
+                .field(&len)
+                .field(&String::from_utf8_lossy(x))
+                .finish(),
+            Value::List(items) => f.debug_list().entries(items.iter()).finish(),
+            Value::Dictionary(d) => f.debug_map().entries(d.iter()).finish(),
+            Value::End => f.write_str("End"),
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -140,6 +154,7 @@ fn main() -> Result<()> {
 
     let torrent_file = parse_benc_value(&mut reader.bytes())
         .with_context(|| format!("failed to parse {:#?}", &args.path))?;
+    println!("{:?}", torrent_file);
 
     // Calculate the infohash (SHA-1 of the contents of the "info" dictionary)
     let mut hasher = Sha1::new();
