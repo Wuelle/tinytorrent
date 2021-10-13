@@ -2,6 +2,7 @@
 mod parser;
 
 use crate::parser::*;
+use ascii::AsciiString;
 use anyhow::{bail, ensure, Context, Result};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -40,17 +41,17 @@ fn main() -> Result<()> {
 
     // Calculate the infohash (SHA-1 of the contents of the "info" dictionary)
     let mut hasher = Sha1::new();
-    let info_dir = String::from(&torrent_file[&Value::from("info")]);
+    let info_dir = AsciiString::from(&torrent_file[&Value::from("info")]);
     // println!("info dir: {}", info_dir);
     hasher.update(info_dir.as_bytes());
     let info_hash = hex::encode(hasher.finalize());
     // println!("Info dir: {}", String::from(&torrent_file[&Value::from("info")]));
-    // let dir = &torrent_file[&Value::from("info")];
-    // if let Value::Dictionary(d) = dir {
-    //     println!("{:?}", d[&Value::from("length")]);
-    //     println!("{:?}", Value::Integer(638582784));
-    //     println!("=====")
-    // }
+    let dir = &torrent_file[&Value::from("info")];
+    if let Value::Dictionary(d) = dir {
+        let info_bytes = AsciiString::from(&d[&Value::from("pieces")]);
+        println!("{:?}", &info_bytes[..10]);
+        println!("=====")
+    }
 
     println!("{}", info_hash);
     println!("974668f694948d065530cdfedb1eabfeb32f2bc7");

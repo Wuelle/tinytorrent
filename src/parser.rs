@@ -1,4 +1,5 @@
 use anyhow::{bail, ensure, Context, Result};
+use ascii::{AsciiString, AsciiChar};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
@@ -51,46 +52,46 @@ impl From<&str> for Value {
     }
 }
 
-impl From<&Value> for String {
+impl From<&Value> for AsciiString {
     fn from(v: &Value) -> Self {
-        let mut res = String::new();
+        let mut res = AsciiString::new();
         match v {
             Value::Integer(i) => {
-                res.push('i');
-                res.push_str(&i.to_string());
-                res.push('e');
+                res.push(AsciiChar::new('i'));
+                res.push_str(&AsciiString::from_ascii(i.to_string()).unwrap());
+                res.push(AsciiChar::new('e'));
             }
             Value::ByteString(bytes) => {
-                res.push_str(&bytes.len().to_string());
-                res.push(':');
-                res.push_str(&String::from_utf8_lossy(bytes));
+                res.push_str(&AsciiString::from_ascii(bytes.len().to_string()).unwrap());
+                res.push(AsciiChar::new(':'));
+                res.push_str(&AsciiString::from_ascii(hex::encode(bytes.clone())).unwrap());
             }
             Value::List(l) => {
-                res.push('l');
+                res.push(AsciiChar::new('l'));
                 for item in l {
-                    res.push_str(&String::from(item));
+                    res.push_str(&AsciiString::from(item));
                 }
-                res.push('e');
+                res.push(AsciiChar::new('e'));
             }
             Value::Dictionary(map) => {
-                res.push('d');
+                res.push(AsciiChar::new('d'));
                 // Values are, by default, sorted in lexicographical order
                 for (key, value) in map {
-                    res.push_str(&String::from(key));
-                    res.push_str(&String::from(value));
+                    res.push_str(&AsciiString::from(key));
+                    res.push_str(&AsciiString::from(value));
                 }
-                res.push('e');
+                res.push(AsciiChar::new('e'));
             }
-            Value::End => res.push('e'),
+            Value::End => res.push(AsciiChar::new('e')),
         }
         res
     }
 }
 
 impl Value {
-    fn from_byte_string(i: &Value) -> Result<String> {
+    fn from_byte_string(i: &Value) -> Result<AsciiString> {
         if let Value::ByteString(s) = i {
-            return Ok(String::from_utf8_lossy(&s).to_string());
+            return Ok(AsciiString::from_ascii(s.clone())?);
         }
         bail!("Expected a ByteString, found {:?}", i);
     }

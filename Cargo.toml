@@ -13,3 +13,4 @@ structopt = "0.3"
 reqwest = { version = "0.11", features = ['blocking'] }
 rand = "0.8"
 hex = "0.4"
+ascii = "1"
