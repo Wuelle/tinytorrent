@@ -1,4 +1,4 @@
-use anyhow::{Context, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
@@ -19,8 +19,8 @@ enum ParseError {
 pub enum Value {
     /// any integer value
     Integer(i64),
-    /// A Sequence of bytes. First parameter represents the length
-    ByteString(u8, Vec<u8>),
+    /// A Sequence of bytes.
+    ByteString(Vec<u8>),
     /// a list of (possibly different) values
     List(Vec<Value>),
     /// Though this implementation allows otherwise, keys must always be Value::ByteString
@@ -33,15 +33,66 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Integer(x) => f.debug_tuple("Integer").field(&x).finish(),
-            Value::ByteString(len, x) => f
+            Value::ByteString(x) => f
                 .debug_tuple("ByteString")
-                .field(&len)
                 .field(&String::from_utf8_lossy(x))
                 .finish(),
             Value::List(items) => f.debug_list().entries(items.iter()).finish(),
             Value::Dictionary(d) => f.debug_map().entries(d.iter()).finish(),
             Value::End => f.write_str("End"),
         }
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        let bytes: Vec<u8> = s.chars().map(|x| x as u8).collect();
+        Value::ByteString(bytes)
+    }
+}
+
+impl From<&Value> for String {
+    fn from(v: &Value) -> Self {
+        let mut res = String::new();
+        match v {
+            Value::Integer(i) => {
+                res.push('i');
+                res.push_str(&i.to_string());
+                res.push('e');
+            }
+            Value::ByteString(bytes) => {
+                res.push_str(&bytes.len().to_string());
+                res.push(':');
+                res.push_str(&String::from_utf8_lossy(bytes));
+            }
+            Value::List(l) => {
+                res.push('l');
+                for item in l {
+                    res.push_str(&String::from(item));
+                }
+                res.push('e');
+            }
+            Value::Dictionary(map) => {
+                res.push('d');
+                // Values are, by default, sorted in lexicographical order
+                for (key, value) in map {
+                    res.push_str(&String::from(key));
+                    res.push_str(&String::from(value));
+                }
+                res.push('e');
+            }
+            Value::End => res.push('e'),
+        }
+        res
+    }
+}
+
+impl Value {
+    fn from_byte_string(i: &Value) -> Result<String> {
+        if let Value::ByteString(s) = i {
+            return Ok(String::from_utf8_lossy(&s).to_string());
+        }
+        bail!("Expected a ByteString, found {:?}", i);
     }
 }
 
@@ -63,7 +114,7 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
                             break;
                         }
                         x *= 10;
-                        x += i64::from(val);
+                        x += i64::from(val - 48);
                     }
                     Value::Integer(x)
                 }
@@ -81,7 +132,7 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
                 // [48, 57] is ascii for [0, 9]
                 48..=57 => {
                     // read all decimals
-                    let mut len = a - 48; // convert from ascii to decimal
+                    let mut len = (a - 48) as usize; // convert from ascii to decimal
                     let val = loop {
                         let val = bytes
                             .next()
@@ -91,7 +142,7 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
                         // if the next byte is still a decimal number
                         if 48 <= val && val <= 57 {
                             len *= 10;
-                            len += val - 48;
+                            len += (val as usize) - 48;
                         } else {
                             break val;
                         }
@@ -109,7 +160,7 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
                                 .ok_or(ParseError::UnexpectedEOF)?,
                         );
                     }
-                    Value::ByteString(len, s)
+                    Value::ByteString(s)
                 }
                 b'd' => {
                     let mut map = BTreeMap::new();
@@ -135,11 +186,11 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
     Ok(Some(val))
 }
 
-/// Parse a bytestream into the root dictionary 
+/// Parse a bytestream into the root dictionary
 pub fn parse_torrent_file(bytes: &mut Bytes<BufReader<File>>) -> Result<BTreeMap<Value, Value>> {
     let val = parse_benc_value(bytes).context("failed to parse benc value")?;
     if let Some(Value::Dictionary(map)) = val {
-        return Ok(map)
+        return Ok(map);
     }
     Err(ParseError::InvalidFormat.into())
 }
