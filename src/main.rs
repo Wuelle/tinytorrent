@@ -1,9 +1,7 @@
-#![doc = include_str!("../README.md")]
 mod parser;
 
 use crate::parser::*;
-use ascii::AsciiString;
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use reqwest;
@@ -40,25 +38,16 @@ fn main() -> Result<()> {
         .collect();
 
     // Calculate the infohash (SHA-1 of the contents of the "info" dictionary)
+    let info_dir: Vec<u8> = (&torrent_file[&Value::from("info")]).into();
     let mut hasher = Sha1::new();
-    let info_dir = AsciiString::from(&torrent_file[&Value::from("info")]);
-    // println!("info dir: {}", info_dir);
-    hasher.update(info_dir.as_bytes());
+    hasher.update(&info_dir);
     let info_hash = hex::encode(hasher.finalize());
-    // println!("Info dir: {}", String::from(&torrent_file[&Value::from("info")]));
-    let dir = &torrent_file[&Value::from("info")];
-    if let Value::Dictionary(d) = dir {
-        let info_bytes = AsciiString::from(&d[&Value::from("pieces")]);
-        println!("{:?}", &info_bytes[..10]);
-        println!("=====")
-    }
 
     println!("{}", info_hash);
     println!("974668f694948d065530cdfedb1eabfeb32f2bc7");
+    // let client = reqwest::blocking::Client::new();
 
-    let client = reqwest::blocking::Client::new();
-
-    // TODO: make this part prettier
+    // // TODO: make this part prettier
     // let tracker_url = String::from(&torrent_file[&Value::from("announce")]);
     // let res = client
     //     .post(tracker_url.split_once(':').unwrap().1)

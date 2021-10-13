@@ -1,5 +1,4 @@
-use anyhow::{bail, ensure, Context, Result};
-use ascii::{AsciiString, AsciiChar};
+use anyhow::{ensure, Context, Result};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
@@ -52,52 +51,48 @@ impl From<&str> for Value {
     }
 }
 
-impl From<&Value> for AsciiString {
+impl From<&Value> for Vec<u8> {
     fn from(v: &Value) -> Self {
-        let mut res = AsciiString::new();
+        let mut res = vec![];
         match v {
             Value::Integer(i) => {
-                res.push(AsciiChar::new('i'));
-                res.push_str(&AsciiString::from_ascii(i.to_string()).unwrap());
-                res.push(AsciiChar::new('e'));
+                res.push(b'i');
+                let i_bytes: Vec<u8> = i.to_string().chars().map(|x| x as u8).collect();
+                res.extend(i_bytes);
+                res.push(b'e');
             }
             Value::ByteString(bytes) => {
-                res.push_str(&AsciiString::from_ascii(bytes.len().to_string()).unwrap());
-                res.push(AsciiChar::new(':'));
-                res.push_str(&AsciiString::from_ascii(hex::encode(bytes.clone())).unwrap());
+                let len_bytes: Vec<u8> = bytes.len().to_string().chars().map(|x| x as u8).collect();
+                res.extend(len_bytes);
+                res.push(b':');
+                res.extend_from_slice(&bytes);
             }
             Value::List(l) => {
-                res.push(AsciiChar::new('l'));
+                res.push(b'l');
                 for item in l {
-                    res.push_str(&AsciiString::from(item));
+                    let item_bytes: Vec<u8> = item.into();
+                    res.extend(&item_bytes);
                 }
-                res.push(AsciiChar::new('e'));
+                res.push(b'e');
             }
             Value::Dictionary(map) => {
-                res.push(AsciiChar::new('d'));
+                res.push(b'd');
                 // Values are, by default, sorted in lexicographical order
-                for (key, value) in map {
-                    res.push_str(&AsciiString::from(key));
-                    res.push_str(&AsciiString::from(value));
+                for (key, val) in map {
+                    let key_bytes: Vec<u8> = key.into();
+                    let val_bytes: Vec<u8> = val.into();
+                    res.extend(&key_bytes);
+                    res.extend(&val_bytes);
                 }
-                res.push(AsciiChar::new('e'));
+                res.push(b'e');
             }
-            Value::End => res.push(AsciiChar::new('e')),
+            Value::End => res.push(b'e'),
         }
         res
     }
 }
 
-impl Value {
-    fn from_byte_string(i: &Value) -> Result<AsciiString> {
-        if let Value::ByteString(s) = i {
-            return Ok(AsciiString::from_ascii(s.clone())?);
-        }
-        bail!("Expected a ByteString, found {:?}", i);
-    }
-}
-
-/// parse a single bencoded value from array of bytes
+/// parse a single bencoded value from a Bytestream
 fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>> {
     let val = match bytes.next() {
         Some(n) => {
@@ -187,7 +182,7 @@ fn parse_benc_value(bytes: &mut Bytes<BufReader<File>>) -> Result<Option<Value>>
     Ok(Some(val))
 }
 
-/// Parse a bytestream into the root dictionary
+/// Parse a bytestream into the root dictionary of a .torrent file
 pub fn parse_torrent_file(bytes: &mut Bytes<BufReader<File>>) -> Result<BTreeMap<Value, Value>> {
     let val = parse_benc_value(bytes).context("failed to parse benc value")?;
     if let Some(Value::Dictionary(map)) = val {
