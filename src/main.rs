@@ -1,6 +1,6 @@
-mod parser;
+mod bencode;
 
-use crate::parser::*;
+use crate::bencode::*;
 use anyhow::{ensure, Context, Result};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -38,33 +38,39 @@ fn main() -> Result<()> {
         .collect();
 
     // Calculate the infohash (SHA-1 of the contents of the "info" dictionary)
-    let info_dir: Vec<u8> = (&torrent_file[&Value::from("info")]).into();
+    let info_dir = &torrent_file[&Value::from("info")];
+    let content_length = &info_dir[&Value::from("length")];
     let mut hasher = Sha1::new();
-    hasher.update(&info_dir);
+    hasher.update(&info_dir.into());
     let info_hash = hex::encode(hasher.finalize());
 
     println!("{}", info_hash);
     println!("974668f694948d065530cdfedb1eabfeb32f2bc7");
-    // let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::new();
 
-    // // TODO: make this part prettier
-    // let tracker_url = String::from(&torrent_file[&Value::from("announce")]);
-    // let res = client
-    //     .post(tracker_url.split_once(':').unwrap().1)
-    //     .query(&[
-    //         (
-    //             "info_hash",
-    //             info_hash.as_str()
-    //         ),
-    //         ("peer_id", &peer_id),
-    //         ("event", "started"),
-    //         ("port", "6881"),
-    //         ("uploaded", "0"),
-    //         ("downloaded", "0"),
-    //     ])
-    //     .send()?;
+    // TODO: make this part prettier
+    let tracker_bytes: Vec<u8> = (&torrent_file[&Value::from("announce")]).into();
+    let tracker_string = String::from_utf8_lossy(&tracker_bytes);
+    let tracker_url = tracker_string.split_once(':').unwrap().1;
+    println!("content length: {}", content_length);
+    println!("connecting to {}", tracker_url);
+    let res = client
+        .get(tracker_url)
+        .query(&[
+            (
+                "info_hash",
+                info_hash.as_str()
+            ),
+            ("peer_id", &peer_id),
+            ("event", "started"),
+            ("port", "6881"),
+            ("uploaded", "0"),
+            ("downloaded", "0"),
+            ("numwant", "50"),
+        ])
+        .send()?;
 
-    // println!("tracker returned Code {}: {:?}", res.status(), res.text());
+    println!("tracker returned Code {}: {:?}", res.status(), res.text());
 
     Ok(())
 }
